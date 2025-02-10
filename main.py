@@ -1,13 +1,14 @@
 import pygame
 import sys
+import estado
 
 pygame.init()
 
-WIDTH, HEIGHT = 1400, 1000
+WIDTH, HEIGHT = 1366, 768
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Jogo de Trilha")
 
-offset_x, offset_y = WIDTH // 4, HEIGHT // 12
+offset_x, offset_y = WIDTH // 4, HEIGHT // 20
 casas = {
     1:  (100 + offset_x, 100 + offset_y),  2:  (400 + offset_x, 100 + offset_y),  3:  (700 + offset_x, 100 + offset_y),
     4:  (200 + offset_x, 200 + offset_y),  5:  (400 + offset_x, 200 + offset_y),  6:  (600 + offset_x, 200 + offset_y),
@@ -36,6 +37,7 @@ trincas_formadas = {"Vermelho": set(), "Azul": set()}
 peca_selecionada = None
 vencedor = None
 
+
 def verificar_linha(jogador):
     trincas = [
         (1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12), (13, 14, 15), (16, 17, 18), (19, 20, 21), (22, 23, 24),
@@ -57,8 +59,10 @@ def remover_peca(casa):
         jogador_atual = "Vermelho" if jogador_atual == "Azul" else "Azul"
 
 def verificar_derrota(jogador):
+    if pecas_restantes[jogador] > 0:
+        return False
     pecas_no_tabuleiro = sum(1 for casa in estado_jogo.values() if casa == jogador)
-    return pecas_no_tabuleiro < 3 and pecas_restantes[jogador] == 0
+    return pecas_no_tabuleiro < 3
 
 def desenhar_setas(casa):
     cor_seta = (255, 0, 0) if jogador_atual == "Vermelho" else (0, 0, 255)
@@ -79,18 +83,47 @@ def desenhar_setas(casa):
             ])
 
 def algoritmo_a_estrela():
-    # Exemplo de lógica para mover peças
-    for origem, destino in conexoes:
-        if estado_jogo[origem] == "Azul" and estado_jogo[destino] is None:
-            return (origem, destino)
+    estado_atual = estado.Estado(estado_jogo, "Azul")  # Corrigido para chamar a classe Estado
+
+    # Primeiro, tentar bloquear
+    caminho_bloquear = estado_atual.a_star_search(
+        conexoes=conexoes,
+        jogador="Azul",
+        objetivo_funcao= estado_atual.objetivo_bloquear
+    )
+    movimentos_bloquear = len(caminho_bloquear) if caminho_bloquear else float('inf')
+
+    # Segundo, tentar criar trinca
+    caminho_trinca = estado_atual.a_star_search(
+        conexoes=conexoes,
+        jogador="Azul",
+        objetivo_funcao=estado_atual.objetivo_trinca
+    )
+    movimentos_trinca = len(caminho_trinca) if caminho_trinca else float('inf')
+
+    # Decidir qual ação tomar
+    if movimentos_bloquear < movimentos_trinca:
+        # Executar a primeira ação do caminho_bloquear
+        primeiro_movimento = caminho_bloquear[0]  # Ajustado para pegar o movimento
+        # Precisamos determinar qual movimento levar do estado atual para o próximo estado
+        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
+            estado_proximo = estado_atual.aplicar_movimento(movimento, "Azul")
+            if estado_proximo == caminho_bloquear[1]:
+                return movimento
+    elif movimentos_trinca < movimentos_bloquear:
+        # Executar a primeira ação do caminho_trinca
+        primeiro_movimento = caminho_trinca[0]  # Ajustado para pegar o movimento
+        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
+            estado_proximo = estado_atual.aplicar_movimento(movimento, "Azul")
+            if estado_proximo == caminho_trinca[1]:
+                return movimento
+    else:
+        # Se ambos são igualmente viáveis ou nenhum encontrado, fazer um movimento aleatório
+        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
+            return movimento
     return (None, None)
 
-def algoritmo_minimax():
-    # Exemplo de lógica para mover peças
-    for origem, destino in conexoes:
-        if estado_jogo[origem] == "Azul" and estado_jogo[destino] is None:
-            return (origem, destino)
-    return (None, None)
+
 
 def menu_principal():
     while True:
@@ -122,13 +155,15 @@ def tela_vitoria(vencedor):
     while True:
         screen.fill((0, 0, 0))
         font = pygame.font.Font(None, 74)
-        text = font.render(f"{vencedor} venceu!", True, (255, 255, 255))
-        screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 3))
+        texto_vencedor = font.render(f"{vencedor} venceu!", True, (255, 255, 255))
+        screen.blit(texto_vencedor, (WIDTH // 2 - texto_vencedor.get_width() // 2, HEIGHT // 3))
 
         font = pygame.font.Font(None, 36)
-        text = font.render("Voltar ao Menu", True, (255, 255, 255))
-        button_rect = text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-        screen.blit(text, button_rect)
+        texto_voltar = font.render("Voltar ao Menu", True, (255, 255, 255))
+        button_rect = pygame.Rect(0, 0, texto_voltar.get_width() + 20, texto_voltar.get_height() + 10)
+        button_rect.center = (WIDTH // 2, HEIGHT // 2 + 50)
+        pygame.draw.rect(screen, (100, 100, 100), button_rect)
+        screen.blit(texto_voltar, texto_voltar.get_rect(center=button_rect.center))
 
         pygame.display.flip()
 
@@ -141,7 +176,7 @@ def tela_vitoria(vencedor):
                     return
 
 def jogo(modo_jogo):
-    global jogador_atual, peca_selecionada, remocao_pendente, vencedor
+    global jogador_atual, peca_selecionada, remocao_pendente, vencedor, rodadas
     rodando = True
     casa_origem, casa_destino = None, None
     
@@ -224,6 +259,7 @@ def jogo(modo_jogo):
                                 rodando = False
                             if not remocao_pendente:
                                 jogador_atual = "Vermelho" if jogador_atual == "Azul" else "Azul"
+            
 
         if modo_jogo == "Humano vs A*" and jogador_atual == "Azul" and vencedor is None:
             if pecas_restantes["Azul"] > 0:
@@ -241,10 +277,14 @@ def jogo(modo_jogo):
                             jogador_atual = "Vermelho"
                         break
             else:
-                casa_origem, casa_destino = algoritmo_a_estrela()
-                if casa_origem is not None and casa_destino is not None:
+                movimento = algoritmo_a_estrela()
+                print("Movimento:", movimento)
+                if movimento != (None, None):
+                    casa_origem, casa_destino = movimento
                     estado_jogo[casa_destino] = "Azul"
                     estado_jogo[casa_origem] = None
+                    pecas_colocadas["Azul"] += 1  # Atualize conforme a lógica do movimento
+                    # Verificar trinca e derrota
                     if verificar_linha("Azul"):
                         remocao_pendente = True
                     if verificar_derrota("Vermelho"):
@@ -252,6 +292,7 @@ def jogo(modo_jogo):
                         rodando = False
                     if not remocao_pendente:
                         jogador_atual = "Vermelho"
+                        
         elif modo_jogo == "Humano vs Minimax" and jogador_atual == "Azul" and vencedor is None:
             if pecas_restantes["Azul"] > 0:
                 for casa, ocupado in estado_jogo.items():
@@ -334,6 +375,7 @@ def jogo(modo_jogo):
                             rodando = False
                         if not remocao_pendente:
                             jogador_atual = "Vermelho"
+                            
 
     if vencedor:
         tela_vitoria(vencedor)
