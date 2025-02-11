@@ -126,44 +126,29 @@ def verificar():
 #---------------------------------------------------------------------------------------------------------------------------------------
 # Função para o algoritmo A*
 def algoritmo_a_estrela():
-    estado_atual = estado.Estado(estado_casa, "Azul")  # Corrigido para chamar a classe Estado
+    estado_atual = estado.Estado(estado_casa, "Azul", trincas_formadas=trincas_formadas, conexoes=conexoes)  # Corrigido para chamar a classe Estado
 
-    # Primeiro, tentar bloquear
-    caminho_bloquear = estado_atual.a_star_search(
-        conexoes=conexoes,
-        jogador="Azul",
-        objetivo_funcao= estado_atual.objetivo_bloquear
-    )
-    movimentos_bloquear = len(caminho_bloquear) if caminho_bloquear else float('inf')
-
-    # Segundo, tentar criar trinca
-    caminho_trinca = estado_atual.a_star_search(
-        conexoes=conexoes,
-        jogador="Azul",
-        objetivo_funcao=estado_atual.objetivo_trinca
-    )
-    movimentos_trinca = len(caminho_trinca) if caminho_trinca else float('inf')
-
-    # Decidir qual ação tomar
-    if movimentos_bloquear < movimentos_trinca:
-        # Executar a primeira ação do caminho_bloquear
-        primeiro_movimento = caminho_bloquear[0]  # Ajustado para pegar o movimento
-        # Precisamos determinar qual movimento levar do estado atual para o próximo estado
-        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
-            estado_proximo = estado_atual.aplicar_movimento(movimento, "Azul")
-            if estado_proximo == caminho_bloquear[1]:
-                return movimento
-    elif movimentos_trinca < movimentos_bloquear:
-        # Executar a primeira ação do caminho_trinca
-        primeiro_movimento = caminho_trinca[0]  # Ajustado para pegar o movimento
-        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
-            estado_proximo = estado_atual.aplicar_movimento(movimento, "Azul")
-            if estado_proximo == caminho_trinca[1]:
-                return movimento
-    else:
-        # Se ambos são igualmente viáveis ou nenhum encontrado, fazer um movimento aleatório
-        for movimento in estado_atual.movimentos_possiveis(conexoes, "Azul"):
-            return movimento
+    #pega uma peça aleatória do jogador atual
+    #verifica se a peça tem movimentos possíveis
+    #se tiver, chama a funcao movimento com a casa de origem e destino
+    #se não, pega outra peça aleatória
+    
+    pegou = False
+    while not pegou:
+        casa = random.choice(list(estado_atual.estado_jogo.keys()))
+        if estado_atual.estado_jogo[casa] == "Azul":
+            movimentos = estado_atual.movimentos_possiveis(casa)
+            if movimentos:
+                movimento = random.choice(movimentos)
+                if(estado_atual.estado_jogo[movimento] == None):
+                    mover_peca(casa, movimento)
+                casa_origem = casa
+                casa_destino = movimento
+                pegou = True
+    
+    if(remocao_pendente):
+        peças_vermelhas = [casa for casa in estado_atual.estado_jogo.keys() if estado_atual.estado_jogo[casa] == "Vermelho"]
+        remover_peca(random.choice(peças_vermelhas))
 #---------------------------------------------------------------------------------------------------------------------------------------
 # Função para o menu principal
 def menu_principal():
@@ -217,6 +202,16 @@ def tela_vitoria(vencedor):
                 if button_rect.collidepoint(event.pos):
                     return
 #---------------------------------------------------------------------------------------------------------------------------------------
+def mensagem_movimento(casa_origem, casa_destino):
+    # Mensagem de movimento
+        if casa_origem is not None and casa_destino is not None:
+            text = font.render(f"Movimento: ({casa_origem} -> {casa_destino})", True, (255, 255, 0))
+            screen.blit(text, (50, HEIGHT // 2))
+            button_text = font.render("Continuar", True, (255, 255, 255))
+            button_rect = button_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 150))
+            pygame.draw.rect(screen, (50, 100, 100), button_rect.inflate(20, 10))
+            screen.blit(button_text, button_rect)
+#---------------------------------------------------------------------------------------------------------------------------------------
 # Função principal do jogo
 def jogo(modo_jogo):
     global jogador_atual, peca_selecionada, remocao_pendente, vencedor, rodadas
@@ -259,14 +254,7 @@ def jogo(modo_jogo):
         if peca_selecionada is not None:
             desenhar_setas(peca_selecionada)
 
-        # Mensagem de movimento
-        if casa_origem is not None and casa_destino is not None:
-            text = font.render(f"Movimento: ({casa_origem} -> {casa_destino})", True, (255, 255, 0))
-            screen.blit(text, (50, HEIGHT // 2))
-            button_text = font.render("Continuar", True, (255, 255, 255))
-            button_rect = button_text.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 150))
-            pygame.draw.rect(screen, (50, 100, 100), button_rect.inflate(20, 10))
-            screen.blit(button_text, button_rect)
+        
 
         pygame.display.flip()
 
@@ -297,7 +285,7 @@ def jogo(modo_jogo):
                         elif estado_casa[casa] is None and pecas_restantes[jogador_atual] > 0:
                             adicionar_peca(casa) # Adiciona a peça
                             
-
+#-----------------------------------------------------------------------------------------------------------------------------------
         # Lógica para o modo "Humano vs A*"
         if modo_jogo == "Humano vs A*" and jogador_atual == "Azul" and vencedor is None:
             
@@ -312,15 +300,9 @@ def jogo(modo_jogo):
                         
             else: # Se ja colocou todas as peças
                 # Executa o algoritmo A*
-                movimento = algoritmo_a_estrela()
-                print("Movimento:", movimento)
-                if movimento != (None, None):
-                    casa_origem, casa_destino = movimento
-                    estado_casa[casa_destino] = "Azul"
-                    estado_casa[casa_origem] = None
-                    pecas_colocadas["Azul"] += 1  # Atualize conforme a lógica do movimento
-                    # Verificar trinca e derrota
-                    verificar()
+                algoritmo_a_estrela()
+                jogador_atual = "Vermelho"
+                
                         
 
     if vencedor:
